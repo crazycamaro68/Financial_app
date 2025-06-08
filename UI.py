@@ -11,8 +11,9 @@ class FinancialManagerApp:
         now = datetime.now()
         self.current_month = now.month
         self.current_year = now.year
+
+        transactions_class_creator.Transactions.load_from_dataframe(self.current_month,self.current_year)
   
-        self.current_trans = transactions_class_creator.Transactions.byMonth(self.current_month, self.current_year)
         self.tree = None
 
         self.setup_layout()
@@ -43,22 +44,29 @@ class FinancialManagerApp:
         next_button = ttk.Button(button_frame, text="Next Month", command=lambda: self.change_month(1))
         next_button.grid(row=0,column=2,sticky="n")
 
-        try:
-            balance_text = f"Starting Balance: {self.current_trans[0].balance}   Ending Balance: {self.current_trans[-1].balance}"
-        except:
-            balance_text = "Starting Balance: N/A   Ending Balance: N/A"
+        self.monthlyBal = ttk.Label(button_frame, text="Loading...", anchor="e", width=50)
+        self.monthlyBal.grid(row=0, column=3, sticky="e", padx= 5, pady= 5)
 
-        self.monthlyBal = ttk.Label(button_frame, text=balance_text, anchor="e", width=45)
-        self.monthlyBal.grid(row=0, column=3, sticky="e")
+        add_trans_button = ttk.Button(self.mathBox, text = "Add Transaction", command= self.add_transaction)
+        add_trans_button.grid(row=0,column=0, padx=5, pady=5)
 
     def update_table_label(self):
-        month_name = f"{self.current_month}/{self.current_year}"
-        self.month_label.config(text=month_name)
+        month_str = f"{self.current_month}/{self.current_year}"
+        self.month_label.config(text=month_str)
+
+        txns = transactions_class_creator.Transactions.instances
 
         try:
-            self.monthlyBal.config(text=f"Starting Balance: {self.current_trans[0].balance} Ending Balance: {self.current_trans[-1].balance}")
-        except:
-            pass
+            start_bal = txns[0].balance - txns[0].amount
+            end_bal = txns[-1].balance
+            bal_text = (
+                f"Starting Balance: ${start_bal:,.2f}   "
+                f"Ending Balance: ${end_bal:,.2f}"
+            )
+        except IndexError:
+            bal_text = "Starting Balance: N/A   Ending Balance: N/A"
+
+        self.monthlyBal.config(text=bal_text)
 
     def create_table(self):
         if self.tree:
@@ -71,7 +79,7 @@ class FinancialManagerApp:
             self.tree.heading(col, text=col)
         self.tree.grid(row=1, column=0, sticky="nsew")
 
-        for txn in self.current_trans:
+        for txn in transactions_class_creator.Transactions.instances:
             self.tree.insert("", "end", values=(txn.date, txn.time, txn.description, txn.amount))
 
     def change_month(self, direction):
@@ -83,8 +91,32 @@ class FinancialManagerApp:
             self.current_month = 12
             self.current_year -= 1
 
-        self.current_trans = transactions_class_creator.Transactions.byMonth(self.current_month, self.current_year)
+        transactions_class_creator.Transactions.load_from_dataframe(self.current_month,self.current_year)
         
         self.update_table_label()
         self.create_table()
+    
+    def add_transaction(self):
+        NAMEOFBOXES = ["Date","Time","Description","Amount"]
+        popup = tk.Toplevel(self.root)
+        popup.title("Add Transaction")
+        
+        top = ttk.Frame(popup)
+        middle = ttk.Frame(popup)
+        bottom = ttk.Frame(popup)
+        top.grid(column=0,row=0)
+        middle.grid(column=0,row=1)
+        bottom.grid(column=0,row=2)
+        label = ttk.Label(top, text="Add Transactions")
+        label.grid(padx=20, pady=20,row=0,column=0,sticky="w")
+        count = 0
+        for i in NAMEOFBOXES:
+            box_label = ttk.Label(middle, text=i)
+            box_label.grid(column=count,row=0,padx=5,pady=5)
+            box_entry = ttk.Entry(middle)
+            box_entry.grid(column=count,row=1,padx=5,pady=5)
+            count += 1
+
+        ok_button = ttk.Button(bottom, text="OK", command=popup.destroy)
+        ok_button.pack(pady=10)
 
