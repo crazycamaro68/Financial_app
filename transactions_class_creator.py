@@ -47,8 +47,9 @@ class Transactions:
         filtered_df = cls.df[(cls.df["Date"].dt.month == month) & (cls.df["Date"].dt.year == year)]
 
         for _, row in filtered_df.iterrows():
-            date = row["Date"].date()
-            transaction = cls(date, row["Time"], row["Description"], row["Amount"], row["Balance"])
+            date = pd.to_datetime(row["Date"])
+            time = datetime.strftime(pd.to_datetime(row["Time"]),"%H:%M")
+            transaction = cls(date, time, row["Description"], row["Amount"], row["Balance"])
             cls.instances.append(transaction)
 
     @classmethod
