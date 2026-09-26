@@ -1,17 +1,16 @@
 import pandas as pd
+import mongoDbAPI
 from datetime import datetime
-
+#Makes all the transactions into objects to be easily handled and modify.
 class Transactions:
     instances = []
-    df = pd.read_excel("master_transaction.xlsx", sheet_name=1, parse_dates=["Date"])
-    current_date = datetime.now()
+    #df = pd.read_excel("master_transaction.xlsx", sheet_name=1, parse_dates=["Date"])
+    #current_date = datetime.now()
 
-    def __init__(self, date, time, description, amount, balance):
+    def __init__(self, date, description, amount):
         self.date = date
-        self.time = time
         self.description = description
         self.amount = amount
-        self.balance = balance
 
     def changeDesc(self, newDescription):
         if newDescription:
@@ -34,7 +33,7 @@ class Transactions:
             "Amount": self.amount,
             "Balance": self.balance
         }
-
+    #Validates the data and comfirms it is right datatype before creating Transaction classes and appending them to instance list.
     @classmethod
     def load_from_dataframe(cls, month=None, year=None):
         if month is None:
@@ -63,3 +62,10 @@ class Transactions:
     @classmethod
     def byCredits(cls):
         return [t for t in cls.instances if t.amount > 0]
+    @classmethod
+    def init_data_from_cursor(cls, start_date, end_date):
+        cursor = mongoDbAPI.pull_transactions(start_date,end_date)
+        for transaction in cursor:
+            new_transaction = cls(transaction.date,transaction.amount,transaction.description)
+            print(new_transaction)
+Transactions.init_data_from_cursor(datetime(2026,8,5),datetime(2026,8,10))
