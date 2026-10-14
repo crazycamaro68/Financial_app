@@ -13,7 +13,7 @@ class FinancialManagerApp:
         self.current_month = now.month
         self.current_year = now.year
 
-        transactions_class_creator.Transactions.load_from_dataframe(self.current_month,self.current_year)
+        transactions_class_creator.Transactions.init_data_from_cursor(self.current_month, self.current_year)
   
         self.tree = None
 
@@ -55,16 +55,7 @@ class FinancialManagerApp:
         month_str = f"{self.current_month}/{self.current_year}"
         self.month_label.config(text=month_str)
 
-        txns = transactions_class_creator.Transactions.instances
-        try:
-            start_bal = txns[0].balance - txns[0].amount
-            end_bal = txns[-1].balance
-            bal_text = (
-                f"Starting Balance: ${start_bal:,.2f}   "
-                f"Ending Balance: ${end_bal:,.2f}"
-            )
-        except IndexError:
-            bal_text = "Starting Balance: N/A   Ending Balance: N/A"
+        bal_text = "Starting Balance: N/A   Ending Balance: N/A"
 
         self.monthlyBal.config(text=bal_text)
 
@@ -72,7 +63,7 @@ class FinancialManagerApp:
         if self.tree:
             self.tree.destroy()
 
-        cols = ["Date", "Time", "Description", "Amount"]
+        cols = ["Date","Description","Amount"]
         self.tree = ttk.Treeview(self.transList, columns=cols, show='headings')
 
         for col in cols:
@@ -80,9 +71,7 @@ class FinancialManagerApp:
         self.tree.grid(row=1, column=0, sticky="nsew")
 
         for txn in transactions_class_creator.Transactions.instances:
-            formated_date = datetime.strftime(txn.date, "%m-%d-%Y")
-            formated_time = datetime.strftime(datetime.strptime(txn.time,"%H:%M"),"%I:%M %p")
-            self.tree.insert("", "end", values=(formated_date,formated_time , txn.description, txn.amount))
+            self.tree.insert("", "end", values=(txn.date, txn.description, txn.amount))
 
     def change_month(self, direction):
         self.current_month += direction
@@ -93,13 +82,13 @@ class FinancialManagerApp:
             self.current_month = 12
             self.current_year -= 1
 
-        transactions_class_creator.Transactions.load_from_dataframe(self.current_month,self.current_year)
+        transactions_class_creator.Transactions.init_data_from_cursor(self.current_month,self.current_year)
         
         self.update_table_label()
         self.create_table()
     
     def add_transaction(self):
-        NAMEOFBOXES = ["Date","Time","Description","Amount"]
+        NAMEOFBOXES = ["Date","Description","Amount"]
         list_of_boxes = []
 
         popup = tk.Toplevel(self.root)
@@ -114,22 +103,16 @@ class FinancialManagerApp:
         ttk.Label(top, text="Add Transactions").grid(padx=20, pady=20,row=0,column=0,sticky="w")
 
         #text box validators
-        def validate_time(time):
-            if time == "":
-                return True
-            return re.match(r'^[0-9:\sapmAPM]*$', time) is not None
         def validate_decimal_number(new_value):
             return re.match(r'^(\d+)?(\.\d*)?$', new_value) is not None
         
-        valid_time = (self.root.register(validate_time), '%P')
         valid_number = (self.root.register(validate_decimal_number), '%P')
 
         for count, name in enumerate(NAMEOFBOXES):
             ttk.Label(middle, text=name).grid(column=count,row=0,padx=5,pady=5)
 
-            if name == "Time":
-                entry = ttk.Entry(middle, validate="key", validatecommand=valid_time)
-            elif name == "Amount":
+
+            if name == "Amount":
                 entry = ttk.Entry(middle, validate="key", validatecommand=valid_number)
             else:
                 entry = ttk.Entry(middle)
@@ -146,21 +129,12 @@ class FinancialManagerApp:
                     continue
             return None
         
-        def parse_time_flexibly(time_str):
-            formats = ["%H:%M", "%I:%M %p", "%I:%M%p"]
-            for fmt in formats:
-                try:
-                    return datetime.strptime(time_str.strip(), fmt)
-                except ValueError:
-                    continue
-            return None
         
         #Gets data from text boxes, formats it, creates new class objects, updates GUI.
         def on_submit():
             date_input = list_of_boxes[0].get()
-            time_input = list_of_boxes[1].get()
-            desc_input = list_of_boxes[2].get()
-            amount_input = list_of_boxes[3].get()
+            desc_input = list_of_boxes[1].get()
+            amount_input = list_of_boxes[2].get()
 
             # Validate and reformat date
             date_obj = parse_date_flexibly(date_input)
@@ -169,18 +143,10 @@ class FinancialManagerApp:
                 return
             formatted_date = datetime.strptime(date_obj.strftime("%Y-%m-%d"),"%Y-%m-%d")
 
-            #Validate and reformat time
-            time_input = ' '.join(time_input.strip().upper().split())
-            time_obj = parse_time_flexibly(time_input)
-            if not time_obj:
-                messagebox.showerror("Invalid Time", "Enter time like 2:30 PM or 14:30.")
-                return
-            formatted_time = time_obj.strftime("%H:%M")
-
             amount_input = float(amount_input) + .00
 
             balance = None
-            new_trans = transactions_class_creator.Transactions(formatted_date,formatted_time,desc_input,amount_input,balance)
+            new_trans = transactions_class_creator.Transactions(formatted_date,desc_input,amount_input)
             
             self.timeline_insert(new_trans)
             self.update_table_label()
@@ -188,18 +154,7 @@ class FinancialManagerApp:
             popup.destroy()
 
         ttk.Button(bottom, text="OK", command=on_submit).pack(pady=10)
-
-    def recalculate_balances(self, start_index):
-        instances = transactions_class_creator.Transactions.instances
-        for i in range(start_index, len(instances)):
-            #Checks if new transaction is at the start and cal orgianal balance before and then updates it to the new transaction.
-            if i == 0:
-                if len(instances) > 1 and instances[1].balance is not None:
-                    inferred_start_balance = instances[1].balance - instances[1].amount
-                    instances[0].balance = inferred_start_balance + instances[0].amount
-            else:
-                instances[i].balance = instances[i-1].balance + instances[i].amount
-    
+  
     def timeline_insert(self,new_object):
         index = 0
         instances = transactions_class_creator.Transactions.instances
@@ -209,13 +164,7 @@ class FinancialManagerApp:
             
             if new_object.date < current_object.date:
                 break
-            elif new_object.date == current_object.date:
-                if new_object.time <= current_object.time:
-                    break
-                else:
-                    index += 1
             else:
                 index += 1
 
-        transactions_class_creator.Transactions.instances.insert(index,new_object)
-        self.recalculate_balances(index)   
+        transactions_class_creator.Transactions.instances.insert(index,new_object)  
