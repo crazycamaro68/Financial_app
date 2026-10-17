@@ -1,8 +1,10 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
+from tkcalendar import DateEntry
 from datetime import datetime
 import re
 import transactions_class_creator
+import mongoDbAPI
 
 class FinancialManagerApp:
     def __init__(self,root):
@@ -45,19 +47,15 @@ class FinancialManagerApp:
         next_button = ttk.Button(button_frame, text="Next Month", command=lambda: self.change_month(1))
         next_button.grid(row=0,column=2,sticky="n")
 
-        self.monthlyBal = ttk.Label(button_frame, text="Loading...", anchor="e", width=50)
-        self.monthlyBal.grid(row=0, column=3, sticky="e", padx= 5, pady= 5)
-
         add_trans_button = ttk.Button(self.mathBox, text = "Add Transaction", command= self.add_transaction)
         add_trans_button.grid(row=0,column=0, padx=5, pady=5)
 
+        del_trans_button = ttk.Button(self.mathBox, text = "Delete Transaction", command= self.del_transaction)
+        del_trans_button.grid(row=1,column=0, padx=5, pady=5)
+    
     def update_table_label(self):
         month_str = f"{self.current_month}/{self.current_year}"
         self.month_label.config(text=month_str)
-
-        bal_text = "Starting Balance: N/A   Ending Balance: N/A"
-
-        self.monthlyBal.config(text=bal_text)
 
     def create_table(self):
         if self.tree:
@@ -88,7 +86,7 @@ class FinancialManagerApp:
         self.create_table()
     
     def add_transaction(self):
-        NAMEOFBOXES = ["Date","Description","Amount"]
+        NAMEOFBOXES = ["Description","Amount"]
         list_of_boxes = []
 
         popup = tk.Toplevel(self.root)
@@ -102,14 +100,19 @@ class FinancialManagerApp:
         bottom.grid(column=0,row=2)
         ttk.Label(top, text="Add Transactions").grid(padx=20, pady=20,row=0,column=0,sticky="w")
 
-        #text box validators
+        #Validates the Amount is a Float
         def validate_decimal_number(new_value):
             return re.match(r'^(\d+)?(\.\d*)?$', new_value) is not None
-        
         valid_number = (self.root.register(validate_decimal_number), '%P')
 
+        # Adds the Calender widget to allow users to select a date easily
+        ttk.Label(middle, text="Date").grid(column=0,row=0,padx=5,pady=5)
+        cal = DateEntry(middle, selectmode = 'day')
+        cal.grid(column=0,row=1,padx=5,pady=5)
+
+        # Generates the Descripton and Amount text boxes
         for count, name in enumerate(NAMEOFBOXES):
-            ttk.Label(middle, text=name).grid(column=count,row=0,padx=5,pady=5)
+            ttk.Label(middle, text=name).grid(column=count+1,row=0,padx=5,pady=5)
 
 
             if name == "Amount":
@@ -117,54 +120,56 @@ class FinancialManagerApp:
             else:
                 entry = ttk.Entry(middle)
             
-            entry.grid(column=count, row=1, padx=5, pady=5)
+            entry.grid(column=count+1, row=1, padx=5, pady=5)
             list_of_boxes.append(entry)
-
-        def parse_date_flexibly(date_str):
-            formats = ["%m/%d/%y", "%m/%d/%Y", "%Y-%m-%d", "%m-%d-%Y", "%m-%d-%y"]
-            for fmt in formats:
-                try:
-                    return datetime.strptime(date_str, fmt)
-                except ValueError:
-                    continue
-            return None
-        
-        
-        #Gets data from text boxes, formats it, creates new class objects, updates GUI.
+      
+        #Gets data from User, formats it, creates new class objects, updates GUI.
         def on_submit():
-            date_input = list_of_boxes[0].get()
-            desc_input = list_of_boxes[1].get()
-            amount_input = list_of_boxes[2].get()
+            date_input = cal.get_date()
+            desc_input = list_of_boxes[0].get()
+            amount_input = list_of_boxes[1].get()
 
-            # Validate and reformat date
-            date_obj = parse_date_flexibly(date_input)
-            if not date_obj:
-                messagebox.showerror("Invalid Date", "Enter a valid date (e.g. 12/31/25, 2025-12-31).")
-                return
-            formatted_date = datetime.strptime(date_obj.strftime("%Y-%m-%d"),"%Y-%m-%d")
+            formated_date = datetime(date_input.year,date_input.month,date_input.day)
 
             amount_input = float(amount_input) + .00
 
-            balance = None
-            new_trans = transactions_class_creator.Transactions(formatted_date,desc_input,amount_input)
-            
-            self.timeline_insert(new_trans)
+            new_trans = transactions_class_creator.Transactions(formated_date,desc_input,amount_input)
+            mongoDbAPI.insert_transaction(new_trans)
+            transactions_class_creator.Transactions.init_data_from_cursor(self.current_month, self.current_year)
+
             self.update_table_label()
             self.create_table()
             popup.destroy()
 
         ttk.Button(bottom, text="OK", command=on_submit).pack(pady=10)
-  
-    def timeline_insert(self,new_object):
-        index = 0
-        instances = transactions_class_creator.Transactions.instances
+    # Grabs the current highlighted transaction in the treeview and stores the values of it, searches mongodb for the entry, and then removes it from mongodb and then recreates the list
+    def del_transaction(self):
+        popup = tk.Toplevel(self.root)
+        popup.title("Add Transaction")
+        
+        top = ttk.Frame(popup)
+        middle = ttk.Frame(popup)
+        bottom = ttk.Frame(popup)
+        top.grid(column=0,row=0)
+        middle.grid(column=0,row=1)
+        bottom.grid(column=0,row=2)
+        ttk.Label(top, text="Are you sure you want to delete?").grid(padx=20, pady=20,row=0,column=0,sticky="w")
 
-        while index < len(instances):
-            current_object = instances[index]
-            
-            if new_object.date < current_object.date:
-                break
+
+        selected_items = self.tree.selection()
+        if selected_items:
+            to_be_removed = self.tree.item(selected_items,"values")
+            # 
+
+        ttk.Label(middle, text=to_be_removed).grid(padx=20, pady=20,row=0,column=0,sticky="w")
+        def check_yes_no(value):
+            if value == 1:
+                print("I DELETED THE THINGY")
+                mongoDbAPI.remove_transaction([datetime.strptime(to_be_removed[0], "%Y-%m-%d %H:%M:%S"),*to_be_removed[1:]])
+                for item in selected_items:
+                    self.tree.delete(item)
+                popup.destroy()
             else:
-                index += 1
-
-        transactions_class_creator.Transactions.instances.insert(index,new_object)  
+                popup.destroy()
+        ttk.Button(bottom, text="No", command=lambda: check_yes_no(0)).pack(pady=10)
+        ttk.Button(bottom, text="Yes", command=lambda: check_yes_no(1)).pack(pady=10)

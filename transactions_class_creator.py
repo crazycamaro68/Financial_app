@@ -1,4 +1,3 @@
-import pandas as pd
 import mongoDbAPI
 from datetime import datetime
 #Makes all the transactions into objects to be easily handled and modify.
